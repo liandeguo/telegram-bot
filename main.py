@@ -1,5 +1,5 @@
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 import os
 import subprocess
 import nmap
@@ -87,16 +87,77 @@ async def ipscan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def energy_consumption(update: Update, context: ContextTypes.DEFAULT_TYPE):
     consumption = requests.get(url="http://192.168.1.174:8123/api/states/sensor.total_energy_consumption", headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI1MjVjMTZmMjY0NjY0OWY5ODRkMmVjNzk0OTc3YWNkYiIsImlhdCI6MTcyNDg3NDQ2MywiZXhwIjoyMDQwMjM0NDYzfQ.pG_yT4zGeFoIM6V8FH90rIbQkNW38uCdncNu0Zn4bKs'})
-    await update.message.reply_text(f"Current Energy Consumption: {json.loads(consumption.content)}")
+    data = json.loads(consumption.content)
+   
+    await update.message.reply_text(f"Current Energy Consumption: {data['state']}W")
+    
+async def temperature(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    thermostats = ['leander_temperature','kuche_temperature','wohnzimmer_temperature']
+    for thermostat in thermostats:
+        temperatures = requests.get(url=f"http://192.168.1.174:8123/api/states/sensor.{thermostat}", headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI1MjVjMTZmMjY0NjY0OWY5ODRkMmVjNzk0OTc3YWNkYiIsImlhdCI6MTcyNDg3NDQ2MywiZXhwIjoyMDQwMjM0NDYzfQ.pG_yT4zGeFoIM6V8FH90rIbQkNW38uCdncNu0Zn4bKs'})    
+        data = json.loads(temperatures.content)
+        await update.message.reply_text(f"{thermostat} | {data['state']}°C ")
+   
+
+# Define the /start command handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Create buttons
+    button1 = KeyboardButton('🛜 Networking')
+    button2 = KeyboardButton('💡 Smart Home')
+    
+    # Create reply markup with the buttons
+    reply_markup = ReplyKeyboardMarkup([[button1, button2]], resize_keyboard=True)
+    
+    # Send a message with the keyboard
+    await update.message.reply_text('Choose an option:', reply_markup=reply_markup)
+
+async def handle_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message.text == '🛜 Networking':
+        button1 = KeyboardButton('Back')
+        button2 = KeyboardButton('IP-Scan')
+        button3 = KeyboardButton('Ping')
+        await update.message.reply_text(f'Showing Smart Home Options',reply_markup=ReplyKeyboardMarkup([[button1, button2, button3]], resize_keyboard=True))
+    elif update.message.text == '💡 Smart Home':
+        button1 = KeyboardButton('Back')
+        button2 = KeyboardButton('Energy Consumption')
+        button3 = KeyboardButton('Temperatures')
+        button4 = KeyboardButton('Lights')
+        await update.message.reply_text(f'Showing Smart Home Options',reply_markup=ReplyKeyboardMarkup([[button1,button2],[button3, button4]], resize_keyboard=True))
+    elif update.message.text == 'Back':
+        await start(update, context)
+    # Network
+    if update.message.text == 'IP-Scan':
+        await ipscan(update, context)
+    elif update.message.text == 'Ping':
+        await ping(update, context)
+
+    # Smart Home
+    if update.message.text == 'Energy Consumption':
+        await energy_consumption(update, context)
+    elif update.message.text == 'Temperatures':
+        await temperature(update, context)
+    elif update.message.text == 'Lights':
+        back = KeyboardButton(f'Back')
+        button1 = KeyboardButton(f'Leander')
+        button2 = KeyboardButton(f'Wohnzimmer')
+        await update.message.reply_text(f'Showing Lights', reply_markup=ReplyKeyboardMarkup([[back,button1,button2]], resize_keyboard=True))
+
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
+     # Create the initial keyboard button
+    button1 = KeyboardButton('Ping Hosts')
+    
+    # Create initial reply markup
+    initial_reply_markup = ReplyKeyboardMarkup([[button1]], resize_keyboard=True)
 
+    application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("ping", ping))
     application.add_handler(CommandHandler("ipscan", ipscan))
     application.add_handler(CommandHandler("energycon", energy_consumption))
     # application.add_handler(CommandHandler("speedtest", speed))
-
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_button_press))   
     application.run_polling()
+    
 
 if __name__ == '__main__':
     main()
