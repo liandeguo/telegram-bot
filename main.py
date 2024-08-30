@@ -5,6 +5,7 @@ import subprocess
 import nmap
 import requests
 import json
+from requests import post
 
 TOKEN = '7005517970:AAFeiPKO48bOAekVx_CrwIJfuo17xLL-N5k' 
 
@@ -47,7 +48,6 @@ async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rpi3 = False
         rpi4 = False
         lxc_network_mgmt = False
-        lxc_jellyfin = False
         lxc_minecraft = False
         lxc_ansible = False
 
@@ -84,12 +84,6 @@ async def ipscan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else: 
         formatted_results = "\n".join(scan_results)
         await update.message.reply_text(f"Scan Results:\n{formatted_results}")
-
-async def energy_consumption(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    consumption = requests.get(url="http://192.168.1.174:8123/api/states/sensor.total_energy_consumption", headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI1MjVjMTZmMjY0NjY0OWY5ODRkMmVjNzk0OTc3YWNkYiIsImlhdCI6MTcyNDg3NDQ2MywiZXhwIjoyMDQwMjM0NDYzfQ.pG_yT4zGeFoIM6V8FH90rIbQkNW38uCdncNu0Zn4bKs'})
-    data = json.loads(consumption.content)
-   
-    await update.message.reply_text(f"Current Energy Consumption: {data['state']}W")
     
 async def temperature(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thermostats = ['leander_temperature','kuche_temperature','wohnzimmer_temperature']
@@ -118,8 +112,11 @@ async def handle_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE
         button3 = KeyboardButton('Ping')
         await update.message.reply_text(f'Showing Smart Home Options',reply_markup=ReplyKeyboardMarkup([[button1, button2, button3]], resize_keyboard=True))
     elif update.message.text == '💡 Smart Home':
+        consumption = requests.get(url="http://192.168.1.174:8123/api/states/sensor.total_energy_consumption", headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI1MjVjMTZmMjY0NjY0OWY5ODRkMmVjNzk0OTc3YWNkYiIsImlhdCI6MTcyNDg3NDQ2MywiZXhwIjoyMDQwMjM0NDYzfQ.pG_yT4zGeFoIM6V8FH90rIbQkNW38uCdncNu0Zn4bKs'})
+        data = json.loads(consumption.content)
+    
         button1 = KeyboardButton('Back')
-        button2 = KeyboardButton('Energy Consumption')
+        button2 = KeyboardButton(f'Energy Consumption: {data['state']}W')
         button3 = KeyboardButton('Temperatures')
         button4 = KeyboardButton('Lights')
         await update.message.reply_text(f'Showing Smart Home Options',reply_markup=ReplyKeyboardMarkup([[button1,button2],[button3, button4]], resize_keyboard=True))
@@ -132,15 +129,20 @@ async def handle_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE
         await ping(update, context)
 
     # Smart Home
-    if update.message.text == 'Energy Consumption':
-        await energy_consumption(update, context)
     elif update.message.text == 'Temperatures':
         await temperature(update, context)
     elif update.message.text == 'Lights':
         back = KeyboardButton(f'Back')
         button1 = KeyboardButton(f'Leander')
         button2 = KeyboardButton(f'Wohnzimmer')
-        await update.message.reply_text(f'Showing Lights', reply_markup=ReplyKeyboardMarkup([[back,button1,button2]], resize_keyboard=True))
+        await update.message.reply_text(f'Showing Lights', reply_markup=ReplyKeyboardMarkup([[back],[button1],[button2]], resize_keyboard=True))
+    elif update.message.text == 'Leander':
+        url = "http://192.168.1.174:8123/api/services/light/toggle"
+        headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI1MjVjMTZmMjY0NjY0OWY5ODRkMmVjNzk0OTc3YWNkYiIsImlhdCI6MTcyNDg3NDQ2MywiZXhwIjoyMDQwMjM0NDYzfQ.pG_yT4zGeFoIM6V8FH90rIbQkNW38uCdncNu0Zn4bKs"}
+        data = {"entity_id": "light.leander"}
+        post(url, headers=headers, json=data)
+        await update.message.reply_text(f'Toggling Leander Lights')
+
 
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
@@ -153,7 +155,6 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("ping", ping))
     application.add_handler(CommandHandler("ipscan", ipscan))
-    application.add_handler(CommandHandler("energycon", energy_consumption))
     # application.add_handler(CommandHandler("speedtest", speed))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_button_press))   
     application.run_polling()
